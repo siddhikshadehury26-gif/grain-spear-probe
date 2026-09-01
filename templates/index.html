@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GrainGuard IoT | Early Spoilage & FEFO Decision Engine</title>
+    <meta name="description" content="Ultra-low-cost multi-spectral IoT monitoring ecosystem for early grain spoilage detection and FEFO logistics prioritization.">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Chart.js for Multi-Spectral Time-Series Visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="dark-theme">
+
+    <!-- Top Navigation Bar -->
+    <header class="top-nav" id="topNav">
+        <div class="nav-container">
+            <div class="brand-section">
+                <div class="brand-logo-glow">
+                    <i class="fa-solid fa-seedling brand-icon"></i>
+                </div>
+                <div class="brand-text">
+                    <h1 class="brand-title">GRAINGUARD <span class="brand-highlight">IoT</span></h1>
+                    <p class="brand-subtitle">Multi-Spectral Spoilage & FEFO Decision Engine</p>
+                </div>
+            </div>
+
+            <!-- Central HUD System Status -->
+            <div class="hud-status-bar">
+                <div class="hud-item">
+                    <span class="hud-dot live-pulse"></span>
+                    <span class="hud-label">ESP32 Telemetry:</span>
+                    <span class="hud-value status-online" id="connectionStatus">ACTIVE (5s polling)</span>
+                </div>
+                <div class="hud-divider"></div>
+                <div class="hud-item">
+                    <i class="fa-solid fa-clock-rotate-left"></i>
+                    <span class="hud-label">Early Lead Window:</span>
+                    <span class="hud-value highlight-cyan">3 - 5 Days Before Thermal Lag</span>
+                </div>
+                <div class="hud-divider"></div>
+                <div class="hud-item">
+                    <i class="fa-solid fa-shield-halved"></i>
+                    <span class="hud-label">Solar False-Alarm Filter:</span>
+                    <span class="hud-value highlight-emerald">DIFF-MATRIX ARMED</span>
+                </div>
+            </div>
+
+            <!-- Right Controls -->
+            <div class="nav-actions">
+                <button class="btn btn-outline" id="btnRefresh" onclick="fetchWarehouseData()" title="Force Refresh">
+                    <i class="fa-solid fa-rotate"></i>
+                </button>
+                <button class="btn btn-primary" onclick="openDemoModal()" title="Hackathon Interactive Simulation">
+                    <i class="fa-solid fa-flask-vial"></i> Live Demo Control
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Dashboard Container -->
+    <main class="dashboard-content">
+
+        <!-- Critical Alert Banner (Appears dynamically if Rank #1 is CRITICAL) -->
+        <section class="critical-alert-banner" id="criticalAlertBanner" style="display: none;">
+            <div class="alert-content">
+                <div class="alert-icon-box">
+                    <i class="fa-solid fa-triangle-exclamation pulse-fast"></i>
+                </div>
+                <div class="alert-details">
+                    <h3 id="criticalAlertTitle">CRITICAL SPOILAGE DETECTED: FEFO RANK #1 REQ DISPATCH</h3>
+                    <p id="criticalAlertDesc">Headspace CO2 metabolic respiration surged above 2,500 ppm. Immediate dispatch to milling required.</p>
+                </div>
+                <div class="alert-actions">
+                    <button class="btn btn-danger-glow" id="btnCriticalDispatch" onclick="quickDispatchRankOne()">
+                        <i class="fa-solid fa-truck-fast"></i> Instant Milling Dispatch
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Warehouse Executive KPI Summary Bar -->
+        <section class="kpi-grid">
+            <div class="kpi-card glass-panel">
+                <div class="kpi-icon-wrap icon-blue">
+                    <i class="fa-solid fa-warehouse"></i>
+                </div>
+                <div class="kpi-info">
+                    <span class="kpi-title">Total Monitored Stock</span>
+                    <div class="kpi-stat-row">
+                        <span class="kpi-value" id="kpiTotalStock">355.0</span>
+                        <span class="kpi-unit">Tons</span>
+                    </div>
+                    <span class="kpi-subtext" id="kpiTotalUnits">6 Silos / Stacks Monitored</span>
+                </div>
+            </div>
+
+            <div class="kpi-card glass-panel" id="kpiAtRiskCard">
+                <div class="kpi-icon-wrap icon-red">
+                    <i class="fa-solid fa-fire-flame-curved"></i>
+                </div>
+                <div class="kpi-info">
+                    <span class="kpi-title">Stock At Imminent Risk</span>
+                    <div class="kpi-stat-row">
+                        <span class="kpi-value text-critical" id="kpiAtRiskStock">40.0</span>
+                        <span class="kpi-unit">Tons</span>
+                    </div>
+                    <span class="kpi-subtext" id="kpiAtRiskBreakdown">1 Critical, 1 Warning</span>
+                </div>
+            </div>
+
+            <div class="kpi-card glass-panel">
+                <div class="kpi-icon-wrap icon-cyan">
+                    <i class="fa-solid fa-wind"></i>
+                </div>
+                <div class="kpi-info">
+                    <span class="kpi-title">Mean Headspace CO₂</span>
+                    <div class="kpi-stat-row">
+                        <span class="kpi-value highlight-cyan" id="kpiMeanCO2">695.8</span>
+                        <span class="kpi-unit">ppm</span>
+                    </div>
+                    <span class="kpi-subtext">Metabolic Respiration Proxy</span>
+                </div>
+            </div>
+
+            <div class="kpi-card glass-panel">
+                <div class="kpi-icon-wrap icon-emerald">
+                    <i class="fa-solid fa-list-ol"></i>
+                </div>
+                <div class="kpi-info">
+                    <span class="kpi-title">FEFO Dispatch Urgency #1</span>
+                    <div class="kpi-stat-row">
+                        <span class="kpi-value highlight-amber" id="kpiTopRankUnit">STACK-B01</span>
+                    </div>
+                    <span class="kpi-subtext" id="kpiTopRankDTS">Days to Spoilage: 4.8 Days</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Interactive Hackathon Simulation Bar -->
+        <section class="demo-controller-bar glass-panel">
+            <div class="demo-bar-header">
+                <div class="demo-title">
+                    <i class="fa-solid fa-gamepad"></i>
+                    <span>Interactive Hackathon Demo Sequence:</span>
+                </div>
+                <div class="demo-target-select-wrap">
+                    <label for="demoTargetUnit">Target Probe:</label>
+                    <select id="demoTargetUnit" class="select-input">
+                        <option value="SPEAR-D01" selected>SPEAR-D01 (Live ESP32 Spear Probe - Paddy Bags)</option>
+                        <option value="SILO-A01">SILO-A01 (Vertical Rod Array - Wheat)</option>
+                        <option value="SILO-A02">SILO-A02 (Vertical Rod Array - Basmati Rice)</option>
+                        <option value="STACK-B01">STACK-B01 (Spear Probe - Yellow Corn)</option>
+                        <option value="CONT-C01">CONT-C01 (Godown Container - Malt Barley)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="demo-action-buttons">
+                <button class="btn-demo btn-demo-breath" onclick="triggerSimulationEvent('breath_spike')">
+                    <i class="fa-solid fa-lungs"></i>
+                    <div class="btn-demo-text">
+                        <strong>1. Breath Exhale on MQ-135</strong>
+                        <small>Spikes CO₂ to ~2950 ppm (Immediate FEFO Rank #1 Alert)</small>
+                    </div>
+                </button>
+
+                <button class="btn-demo btn-demo-solar" onclick="triggerSimulationEvent('solar_heat')">
+                    <i class="fa-solid fa-sun"></i>
+                    <div class="btn-demo-text">
+                        <strong>2. Diurnal Solar Heat Wave</strong>
+                        <small>Ambient 38°C vs Core 23°C (Rejects False Alarm!)</small>
+                    </div>
+                </button>
+
+                <button class="btn-demo btn-demo-moisture" onclick="triggerSimulationEvent('wet_core_leak')">
+                    <i class="fa-solid fa-droplet"></i>
+                    <div class="btn-demo-text">
+                        <strong>3. Core Water Leak</strong>
+                        <small>Moisture 19.8% & RH 84% (Capacitive sensor trigger)</small>
+                    </div>
+                </button>
+
+                <button class="btn-demo btn-demo-step" onclick="triggerSimulationEvent('step_spoilage')">
+                    <i class="fa-solid fa-forward-step"></i>
+                    <div class="btn-demo-text">
+                        <strong>4. Advance +12h Bio-Heat</strong>
+                        <small>Simulates progressive mold colony respiration</small>
+                    </div>
+                </button>
+
+                <button class="btn-demo btn-demo-reset" onclick="triggerSimulationEvent('normal_reset')">
+                    <i class="fa-solid fa-rotate-left"></i>
+                    <div class="btn-demo-text">
+                        <strong>Reset Baseline</strong>
+                        <small>Restores all units to optimal certified state</small>
+                    </div>
+                </button>
+            </div>
+
+            <!-- Demo Feedback Ticker -->
+            <div class="demo-feedback-ticker" id="demoFeedbackTicker">
+                <i class="fa-solid fa-circle-info"></i>
+                <span id="demoFeedbackMessage">System initialized. Ready for live physical telemetry or simulated stress testing.</span>
+            </div>
+        </section>
+
+        <!-- FEFO Priority Dispatch Matrix Table -->
+        <section class="section-container">
+            <div class="section-header">
+                <div class="section-title-wrap">
+                    <div class="icon-badge"><i class="fa-solid fa-truck-ramp-box"></i></div>
+                    <div>
+                        <h2 class="section-title">FEFO Priority Dispatch Queue</h2>
+                        <p class="section-subtitle">Dynamically ranked by minimum Days-to-Spoilage (DTS) to prevent warehouse inventory loss</p>
+                    </div>
+                </div>
+                <div class="section-controls">
+                    <span class="badge badge-outline"><i class="fa-solid fa-bolt"></i> Auto-Ranked by DTS Matrix</span>
+                </div>
+            </div>
+
+            <div class="table-responsive glass-panel">
+                <table class="fefo-table" id="fefoTable">
+                    <thead>
+                        <tr>
+                            <th class="text-center">FEFO Rank</th>
+                            <th>Storage Unit / Type</th>
+                            <th>Commodity</th>
+                            <th>Stock (Tons)</th>
+                            <th>Headspace CO₂</th>
+                            <th>Core Temp (ΔT)</th>
+                            <th>RH %</th>
+                            <th>Days to Spoilage</th>
+                            <th>Risk Status</th>
+                            <th>Action & Dispatch</th>
+                        </tr>
+                    </thead>
+                    <tbody id="fefoTableBody">
+                        <!-- Populated dynamically by app.js -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Monitored Storage Units Grid -->
+        <section class="section-container">
+            <div class="section-header">
+                <div class="section-title-wrap">
+                    <div class="icon-badge"><i class="fa-solid fa-microchip"></i></div>
+                    <div>
+                        <h2 class="section-title">Multi-Spectral Storage Node Cards</h2>
+                        <p class="section-subtitle">Real-time telemetric breakdown of core microclimate and headspace respiration</p>
+                    </div>
+                </div>
+                <div class="view-filter-tabs">
+                    <button class="tab-btn active" onclick="filterCards('ALL')">All Units (<span id="countAll">6</span>)</button>
+                    <button class="tab-btn" onclick="filterCards('CRITICAL')">Critical (<span id="countCritical">0</span>)</button>
+                    <button class="tab-btn" onclick="filterCards('WARNING')">Warning (<span id="countWarning">0</span>)</button>
+                    <button class="tab-btn" onclick="filterCards('OPTIMAL')">Optimal (<span id="countOptimal">0</span>)</button>
+                </div>
+            </div>
+
+            <div class="cards-grid" id="containerCardsGrid">
+                <!-- Populated dynamically by app.js -->
+            </div>
+        </section>
+
+        <!-- Deep-Dive Analytical Chart & Diagnostic Modal -->
+        <div class="modal-backdrop" id="detailModal" style="display: none;">
+            <div class="modal-dialog glass-panel-modal">
+                <div class="modal-header">
+                    <div class="modal-title-box">
+                        <span class="modal-badge" id="modalStatusBadge">CRITICAL</span>
+                        <h2 class="modal-title" id="modalContainerTitle">SILO-A01 Detailed Analytics</h2>
+                        <span class="modal-grain" id="modalGrainType">Hard Red Winter Wheat (120 Tons)</span>
+                    </div>
+                    <button class="modal-close-btn" onclick="closeDetailModal()">&times;</button>
+                </div>
+
+                <div class="modal-body">
+                    <!-- Differential Matrix Logic Banner -->
+                    <div class="diff-matrix-banner" id="modalDiffBanner">
+                        <div class="diff-icon"><i class="fa-solid fa-dna"></i></div>
+                        <div class="diff-info">
+                            <h4 id="modalDiffClassification">INTERNAL METABOLIC HOTSPOT DETECTED</h4>
+                            <p id="modalDiffExplanation">Core temperature (+2.5°C over ambient) coupled with surging CO2 respiration indicates active biological rot.</p>
+                        </div>
+                    </div>
+
+                    <!-- Multi-Spectral Lead Time Graph -->
+                    <div class="chart-container-box">
+                        <div class="chart-header">
+                            <div>
+                                <h3 class="chart-title"><i class="fa-solid fa-chart-line"></i> Respiration Lead Indicator vs Thermal Lag Curve</h3>
+                                <p class="chart-desc">Demonstrating 3 to 5-day advance detection via Headspace CO₂ respiration flux before core heat builds</p>
+                            </div>
+                            <div class="chart-legend-custom">
+                                <span class="legend-item"><span class="legend-dot dot-co2"></span> CO₂ Respiration (ppm)</span>
+                                <span class="legend-item"><span class="legend-dot dot-temp"></span> Core Temp (°C)</span>
+                                <span class="legend-item"><span class="legend-dot dot-amb"></span> Ambient Temp (°C)</span>
+                            </div>
+                        </div>
+                        <div class="chart-wrapper">
+                            <canvas id="timeSeriesChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Sensor Diagnostic Telemetry Grid -->
+                    <div class="modal-sensor-grid">
+                        <div class="sensor-metric-card">
+                            <span class="sensor-name"><i class="fa-solid fa-wind"></i> Headspace CO₂ Respiration</span>
+                            <div class="sensor-value-large" id="modalValCO2">1,420 ppm</div>
+                            <span class="sensor-delta" id="modalDeltaCO2">+340 ppm / hr (Active Surge)</span>
+                        </div>
+
+                        <div class="sensor-metric-card">
+                            <span class="sensor-name"><i class="fa-solid fa-temperature-half"></i> Core vs Ambient Temp</span>
+                            <div class="sensor-value-large" id="modalValTemp">26.8°C <small>/ 24.2°C</small></div>
+                            <span class="sensor-delta" id="modalDeltaTemp">ΔT = +2.6°C (Inside-Out)</span>
+                        </div>
+
+                        <div class="sensor-metric-card">
+                            <span class="sensor-name"><i class="fa-solid fa-droplet"></i> Equilibrium RH</span>
+                            <div class="sensor-value-large" id="modalValRH">68.4%</div>
+                            <span class="sensor-delta" id="modalDeltaRH">Equilibrium Threshold: 65%</span>
+                        </div>
+
+                        <div class="sensor-metric-card">
+                            <span class="sensor-name"><i class="fa-solid fa-water"></i> Core Contact Moisture</span>
+                            <div class="sensor-value-large" id="modalValMoist">15.2%</div>
+                            <span class="sensor-delta" id="modalDeltaMoist">Safe Limit: 14.5%</span>
+                        </div>
+                    </div>
+
+                    <!-- Root-Cause Analysis Explainer -->
+                    <div class="root-cause-box">
+                        <h4><i class="fa-solid fa-stethoscope"></i> Automated Root-Cause Spoilage Diagnostic</h4>
+                        <ul id="modalRootCausesList" class="root-cause-list">
+                            <li>Metabolic Respiration Spike: Headspace CO2 reached 1420 ppm (+340 ppm/interval)</li>
+                            <li>Micro-climate Humidity Excess: Equilibrium RH at 68.4% (Threshold: 65%)</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <div class="footer-left">
+                        <span class="footer-dts-label">Estimated Days to Spoilage:</span>
+                        <span class="footer-dts-val" id="modalDTS">4.8 Days</span>
+                    </div>
+                    <div class="footer-right">
+                        <button class="btn btn-secondary" onclick="closeDetailModal()">Close Window</button>
+                        <button class="btn btn-primary" id="btnModalDispatch" onclick="dispatchCurrentModalUnit()">
+                            <i class="fa-solid fa-truck-fast"></i> Dispatch to Milling Facility
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+        <div class="footer-container">
+            <p>GrainGuard IoT &copy; 2026 | Ultra-Low-Cost Multi-Spectral Agricultural Telemetry & FEFO Logistics Platform</p>
+            <div class="footer-tags">
+                <span class="tag">ESP32 Edge Microcontroller</span>
+                <span class="tag">MQ-135 Gas Diffusion</span>
+                <span class="tag">DHT22 Microclimate</span>
+                <span class="tag">Capacitive Moisture</span>
+                <span class="tag">Differential Thermal Matrix</span>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Application Script -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
