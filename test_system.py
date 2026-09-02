@@ -97,7 +97,7 @@ def test_endpoints():
     print(f"    Differential Matrix Classification: {diff_matrix['classification']}. Status remains OPTIMAL.")
 
     # 7. Test FEFO Dispatch Execution
-    print("\n[7/7] Testing FEFO Dispatch to Milling Plant...")
+    print("\n[7/8] Testing FEFO Dispatch to Milling Plant...")
     res = requests.post(f"{BASE_URL}/api/dispatch/SPEAR-D01")
     assert res.status_code == 200
     res = requests.get(f"{BASE_URL}/api/containers/SPEAR-D01")
@@ -106,9 +106,22 @@ def test_endpoints():
     assert dispatched_detail["headspace_co2"] <= 450.0
     print(f"  [PASS] Dispatch verified! Container SPEAR-D01 safely replenished with fresh certified stock.")
 
+    # 8. Test Multi-Channel Spoilage Notification Feed
+    print("\n[8/8] Testing /api/notifications Alert Feed...")
+    res = requests.get(f"{BASE_URL}/api/notifications")
+    assert res.status_code == 200
+    notif_data = res.json()
+    assert notif_data["status"] == "success"
+    assert len(notif_data["notifications"]) > 0
+    top_notif = notif_data["notifications"][0]
+    safe_title = top_notif['title'].encode('ascii', 'replace').decode('ascii')
+    print(f"  [PASS] Spoilage Alerts Logged: {notif_data['total']} alerts recorded.")
+    print(f"    Latest Alert: [{top_notif['level']}] {safe_title} -> Sent to: {top_notif['recipient']}")
+
     print("\n" + "=" * 60)
-    print("ALL 7 SYSTEM TESTS PASSED PERFECTLY!")
+    print("ALL 8 SYSTEM & NOTIFICATION TESTS PASSED PERFECTLY!")
     print("=" * 60)
 
 if __name__ == "__main__":
     test_endpoints()
+
