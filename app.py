@@ -96,6 +96,27 @@ INITIAL_CONTAINERS = {
 # Container telemetry state map
 CONTAINER_STORE = {}
 
+# In-memory notifications & logistics alert dispatch log
+NOTIFICATION_LOG = []
+
+def log_notification(level: str, container_id: str, title: str, message: str, dts: float = None):
+    """Logs an automated logistics alert event with simulated dispatch notification recipients"""
+    now_str = datetime.now(timezone.utc).strftime("%H:%M:%S")
+    entry = {
+        "id": len(NOTIFICATION_LOG) + 1,
+        "timestamp": now_str,
+        "level": level, # CRITICAL, WARNING, INFO, SUCCESS
+        "container_id": container_id,
+        "title": title,
+        "message": message,
+        "days_to_spoilage": dts,
+        "recipient": "Milling Logistics Dispatcher & Warehouse Floor Manager (Push/SMS)"
+    }
+    NOTIFICATION_LOG.insert(0, entry) # Most recent first
+    if len(NOTIFICATION_LOG) > 50:
+        NOTIFICATION_LOG.pop()
+    return entry
+
 def initialize_database():
     """Generates synthetic 24-hour historical curves for initial containers"""
     global CONTAINER_STORE
@@ -349,6 +370,7 @@ def simulate_event():
                 "headspace_co2": round(c["headspace_co2"], 1)
             })
             msg = f"Breath Exhale Trigger Activated on {target_id}! CO2 surged to 2950 ppm. Metabolic lead alert triggered."
+            log_notification("CRITICAL", target_id, "🚨 CRITICAL METABOLIC RESPIRATION ALERT", f"{target_id} Headspace CO2 reached 2950 ppm (+2500 ppm surge). Estimated Spoilage: 1.5 Days. Immediate milling dispatch required!", 1.5)
 
         elif event_type == "solar_heat":
             # Solar Heat Wave (Differential Matrix Demo)
@@ -365,6 +387,7 @@ def simulate_event():
                 "headspace_co2": round(c["headspace_co2"], 1)
             })
             msg = f"Solar Heat Wave Simulated on {target_id}. Ambient={c['ambient_temp']}°C, Core={c['temperature']}°C. Differential matrix rejects false alarm."
+            log_notification("INFO", target_id, "☀️ Diurnal Solar Heat Filtered", f"{target_id} Exterior wall warmed to 38.5°C. Differential matrix confirmed ΔT < 0 and flat CO2. False alarm rejected.", 180.0)
 
         elif event_type == "wet_core_leak":
             c = CONTAINER_STORE[target_id]
@@ -380,10 +403,12 @@ def simulate_event():
                 "headspace_co2": round(c["headspace_co2"], 1)
             })
             msg = f"Wet Core Infiltration Injected on {target_id}! Moisture: 19.8%, RH: 84%."
+            log_notification("WARNING", target_id, "💧 Water Infiltration & Condensation Warning", f"{target_id} Capacitive moisture jumped to 19.8%, RH 84%. Spoilage danger in 4.5 Days. Aeration/Milling prioritized.", 4.5)
 
         elif event_type in ["normal_reset", "all_healthy"]:
             initialize_database()
             msg = "All grain storage silos and stack probes reset to optimal baseline parameters."
+            log_notification("SUCCESS", "ALL_NODES", "✓ Baseline Stock Restored", "All warehouse containers recalibrated to pristine certified storage baseline.", 180.0)
 
         elif event_type == "step_spoilage":
             c = CONTAINER_STORE[target_id]
@@ -399,6 +424,7 @@ def simulate_event():
                 "headspace_co2": round(c["headspace_co2"], 1)
             })
             msg = f"Advanced 12h mold growth cycle on {target_id}. CO2 now {c['headspace_co2']} ppm."
+            log_notification("WARNING", target_id, "📈 Mold Respiration Accelerated", f"{target_id} Advanced fungal respiration cycle (+350 ppm). Days to Spoilage declining.", 3.8)
 
         else:
             return jsonify({"status": "error", "message": f"Unknown event '{event_type}'"}), 400
@@ -408,6 +434,17 @@ def simulate_event():
         "message": msg,
         "target_container": target_id
     })
+
+
+@app.route("/api/notifications", methods=["GET"])
+def get_notifications():
+    """Returns the list of automated spoilage alerts and logistics dispatch notifications"""
+    with lock:
+        return jsonify({
+            "status": "success",
+            "total": len(NOTIFICATION_LOG),
+            "notifications": NOTIFICATION_LOG[:25]
+        })
 
 
 @app.route("/api/summary", methods=["GET"])
