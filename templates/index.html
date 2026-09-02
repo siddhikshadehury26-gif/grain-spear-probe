@@ -58,6 +58,15 @@
 
             <!-- Right Controls -->
             <div class="nav-actions">
+                <button class="btn btn-outline" id="btnSoundToggle" onclick="toggleSoundAlerts()" title="Toggle Audio Spoilage Chimes">
+                    <i class="fa-solid fa-volume-high" id="soundIcon"></i>
+                </button>
+                <button class="btn btn-outline" id="btnPushNotification" onclick="requestPushNotifications()" title="Enable Desktop Spoilage Push Notifications">
+                    <i class="fa-solid fa-bell"></i>
+                </button>
+                <button class="btn btn-outline" id="btnNotificationsFeed" onclick="openNotificationModal()" title="View Spoilage Alert History Feed">
+                    <i class="fa-solid fa-clock-rotate-left"></i> <span class="badge badge-critical" id="navAlertCount" style="display:none; padding: 1px 5px; font-size: 0.65rem;">0</span>
+                </button>
                 <button class="btn btn-outline" id="btnRefresh" onclick="fetchWarehouseData()" title="Force Refresh">
                     <i class="fa-solid fa-rotate"></i>
                 </button>
@@ -364,6 +373,32 @@
                             <i class="fa-solid fa-truck-fast"></i> Dispatch to Milling Facility
                         </button>
                     </div>
+                </div>
+            </div>
+        <!-- Floating Live Toast Notifications Container -->
+        <div class="toast-container" id="toastContainer"></div>
+
+        <!-- Spoilage Notification & Logistics Dispatch Feed Modal -->
+        <div class="modal-backdrop" id="notificationModal" style="display: none;">
+            <div class="modal-dialog glass-panel-modal" style="max-width: 800px;">
+                <div class="modal-header">
+                    <div class="modal-title-box">
+                        <span class="badge badge-warning"><i class="fa-solid fa-bell"></i> Multi-Channel Alert Feed</span>
+                        <h2 class="modal-title">Logistics & Advance Spoilage Alerts</h2>
+                        <span class="modal-grain">Automated SMS, Push & Email dispatches to warehouse operators</span>
+                    </div>
+                    <button class="modal-close-btn" onclick="closeNotificationModal()">&times;</button>
+                </div>
+                <div class="modal-body" style="max-height: 60vh; overflow-y: auto;">
+                    <div id="notificationList" class="notification-feed-list">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeNotificationModal()">Close</button>
+                    <button class="btn btn-primary" onclick="testNotificationAlert()">
+                        <i class="fa-solid fa-bell-ring"></i> Send Test Spoilage Push
+                    </button>
                 </div>
             </div>
         </div>
