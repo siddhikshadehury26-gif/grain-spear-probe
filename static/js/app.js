@@ -10,12 +10,220 @@ let currentModalContainerId = null;
 let timeSeriesChartInstance = null;
 let pollingInterval = null;
 
+// Notification & Sound Alert System State
+let soundEnabled = true;
+let pushPermissionGranted = false;
+let previousContainerStates = {}; // Map of container_id -> { status, days_to_spoilage }
+let audioCtx = null;
+
 // Initialize on window load
 document.addEventListener('DOMContentLoaded', () => {
+    // Check local storage for sound preference
+    const savedSound = localStorage.getItem('grainGuardSound');
+    if (savedSound !== null) soundEnabled = savedSound === 'true';
+    updateSoundIcon();
+
+    // Check existing notification permissions
+    if ("Notification" in window && Notification.permission === "granted") {
+        pushPermissionGranted = true;
+    }
+
     fetchWarehouseData();
+    fetchNotificationsFeed();
     // Start automated 2.5-second polling loop
     pollingInterval = setInterval(fetchWarehouseData, 2500);
 });
+
+/**
+ * Web Audio API Synthesizer - Generates high-tech chimes without external mp3 files
+ */
+function getAudioContext() {
+    if (!audioCtx) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioContextClass) audioCtx = new AudioContextClass();
+    }
+    if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+    return audioCtx;
+}
+
+function playSpoilageAlertSound(type = 'warning') {
+    if (!soundEnabled) return;
+    try {
+        const ctx = getAudioContext();
+        if (!ctx) return;
+
+        const now = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        if (type === 'critical') {
+            // Urgent 3-tone cybernetic alarm: 880Hz -> 587Hz -> 880Hz
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(880, now);
+            osc.frequency.setValueAtTime(587, now + 0.12);
+            osc.frequency.setValueAtTime(880, now + 0.24);
+            gain.gain.setValueAtTime(0.18, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.45);
+            osc.start(now);
+            osc.stop(now + 0.45);
+        } else if (type === 'warning') {
+            // Soft dual harmonic chime: 523Hz (C5) -> 659Hz (E5)
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(523.25, now);
+            osc.frequency.setValueAtTime(659.25, now + 0.12);
+            gain.gain.setValueAtTime(0.15, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+            osc.start(now);
+            osc.stop(now + 0.35);
+        } else {
+            // Gentle success blip
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(784, now);
+            gain.gain.setValueAtTime(0.1, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+            osc.start(now);
+            osc.stop(now + 0.2);
+        }
+    } catch (e) {
+        console.warn('Web Audio playback error:', e);
+    }
+}
+
+function toggleSoundAlerts() {
+    soundEnabled = !soundEnabled;
+    localStorage.setItem('grainGuardSound', soundEnabled);
+    updateSoundIcon();
+    if (soundEnabled) {
+        playSpoilageAlertSound('success');
+        showToast('Sound Alerts Enabled', 'Audible chimes armed for spoilage and thermal risk events.', 'info');
+    } else {
+        showToast('Sound Alerts Muted', 'Audible alert tones are now silenced.', 'info');
+    }
+}
+
+function updateSoundIcon() {
+    const icon = document.getElementById('soundIcon');
+    if (icon) {
+        icon.className = soundEnabled ? 'fa-solid fa-volume-high' : 'fa-solid fa-volume-xmark';
+    }
+}
+
+/**
+ * Native Browser Push Notification Manager
+ */
+async function requestPushNotifications() {
+    if (!("Notification" in window)) {
+        alert("This browser does not support desktop notifications.");
+        return;
+    }
+
+    const permission = await Notification.requestPermission();
+    if (permission === "granted") {
+        pushPermissionGranted = true;
+        showToast("Push Notifications Armed", "Desktop notifications enabled for early spoilage warnings.", "success");
+        triggerDesktopNotification("GrainGuard Notification Armed", "You will receive instant alerts whenever grain spoilage is forecasted.");
+    } else {
+        showToast("Notification Permission Denied", "Desktop notifications were blocked in browser settings.", "warning");
+    }
+}
+
+function triggerDesktopNotification(title, body, tag = 'spoilage_alert') {
+    if (pushPermissionGranted && "Notification" in window && Notification.permission === "granted") {
+        try {
+            new Notification(title, {
+                body: body,
+                icon: 'https://cdn-icons-png.flaticon.com/512/2917/2917995.png',
+                tag: tag
+            });
+        } catch (e) {
+            console.warn('Desktop notification error:', e);
+        }
+    }
+}
+
+/**
+ * Slide-in Interactive Toast Alerts
+ */
+function showToast(title, message, type = 'info') {
+    const container = document.getElementById('toastContainer');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = `toast-item toast-${type}`;
+    
+    let iconClass = 'fa-solid fa-circle-info';
+    if (type === 'critical') iconClass = 'fa-solid fa-triangle-exclamation pulse-fast';
+    else if (type === 'warning') iconClass = 'fa-solid fa-circle-exclamation';
+    else if (type === 'success') iconClass = 'fa-solid fa-circle-check';
+
+    toast.innerHTML = `
+        <i class="${iconClass} toast-icon"></i>
+        <div class="toast-body">
+            <span class="toast-title">${title}</span>
+            <span class="toast-message">${message}</span>
+        </div>
+        <button class="toast-close" onclick="this.parentElement.remove()">&times;</button>
+    `;
+
+    container.appendChild(toast);
+
+    // Auto-remove after 6 seconds
+    setTimeout(() => {
+        if (toast.parentElement) {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateX(100%)';
+            setTimeout(() => toast.remove(), 300);
+        }
+    }, 6000);
+}
+
+/**
+ * Monitors Spoilage State Changes & Triggers Notifications
+ */
+function checkSpoilageStatusTransitions(containers) {
+    containers.forEach(c => {
+        const prev = previousContainerStates[c.container_id];
+        const isNewWarning = (!prev || prev.status === 'OPTIMAL' || prev.status === 'ELEVATED') && (c.status === 'WARNING');
+        const isNewCritical = (!prev || prev.status !== 'CRITICAL') && (c.status === 'CRITICAL');
+        const dtsSpike = prev && prev.days_to_spoilage > 5.0 && c.days_to_spoilage <= 5.0;
+
+        if (isNewCritical) {
+            playSpoilageAlertSound('critical');
+            showToast(
+                `🚨 CRITICAL SPOILAGE ALERT: ${c.container_id}`,
+                `${c.grain_type} estimated to spoil in ${c.days_to_spoilage} Days. Headspace CO2 reached ${Math.round(c.headspace_co2)} ppm. Immediate milling required!`,
+                'critical'
+            );
+            triggerDesktopNotification(
+                `🚨 Spoilage Emergency: ${c.container_id}`,
+                `${c.grain_type} (Rank #1 FEFO) at critical risk! Estimated spoilage in ${c.days_to_spoilage} Days.`,
+                `crit_${c.container_id}`
+            );
+        } else if (isNewWarning || dtsSpike) {
+            playSpoilageAlertSound('warning');
+            showToast(
+                `⚠️ Spoilage Warning: ${c.container_id}`,
+                `Early metabolic respiration detected. Estimated spoilage in ${c.days_to_spoilage} Days. Prioritize for dispatch.`,
+                'warning'
+            );
+            triggerDesktopNotification(
+                `⚠️ Spoilage Warning: ${c.container_id}`,
+                `${c.grain_type} spoilage forecasted in ${c.days_to_spoilage} Days.`,
+                `warn_${c.container_id}`
+            );
+        }
+
+        // Cache state
+        previousContainerStates[c.container_id] = {
+            status: c.status,
+            days_to_spoilage: c.days_to_spoilage
+        };
+    });
+}
 
 /**
  * Fetches all container states and warehouse KPIs
@@ -36,6 +244,7 @@ async function fetchWarehouseData() {
             renderFEFOTable(containersData);
             renderContainerCards(containersData);
             updateFilterCounts(containersData);
+            checkSpoilageStatusTransitions(containersData);
 
             // Update modal if currently opened
             if (currentModalContainerId) {
@@ -520,3 +729,87 @@ function dispatchCurrentModalUnit() {
         executeDispatch(currentModalContainerId);
     }
 }
+
+/**
+ * Spoilage Notifications & Logistics Alert Feed Modal Handlers
+ */
+async function fetchNotificationsFeed() {
+    try {
+        const res = await fetch('/api/notifications');
+        if (res.ok) {
+            const data = await res.json();
+            const notifs = data.notifications || [];
+            renderNotificationFeed(notifs);
+            
+            const badge = document.getElementById('navAlertCount');
+            if (badge) {
+                if (notifs.length > 0) {
+                    badge.textContent = notifs.length;
+                    badge.style.display = 'inline-block';
+                } else {
+                    badge.style.display = 'none';
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('Error fetching notification feed:', e);
+    }
+}
+
+function renderNotificationFeed(notifs) {
+    const list = document.getElementById('notificationList');
+    if (!list) return;
+
+    if (!notifs || notifs.length === 0) {
+        list.innerHTML = `
+            <div style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                <i class="fa-solid fa-bell-slash" style="font-size: 2rem; margin-bottom: 0.5rem; display: block;"></i>
+                No critical spoilage alerts logged yet. System operating safely.
+            </div>
+        `;
+        return;
+    }
+
+    let html = '';
+    notifs.forEach(n => {
+        let badgeClass = 'badge-optimal';
+        if (n.level === 'CRITICAL') badgeClass = 'badge-critical';
+        else if (n.level === 'WARNING') badgeClass = 'badge-warning';
+        else if (n.level === 'INFO') badgeClass = 'badge-elevated';
+
+        html += `
+            <div class="feed-item">
+                <div class="feed-header">
+                    <span class="feed-title">
+                        <span class="badge ${badgeClass}">${n.level}</span>
+                        <span>${n.title}</span>
+                    </span>
+                    <span class="feed-time">${n.timestamp} UTC</span>
+                </div>
+                <div class="feed-message">${n.message}</div>
+                <div class="feed-meta">
+                    <span><i class="fa-solid fa-cube"></i> Node: <strong>${n.container_id}</strong> ${n.days_to_spoilage ? `• Spoilage in ${n.days_to_spoilage}d` : ''}</span>
+                    <span class="feed-recipient"><i class="fa-solid fa-paper-plane"></i> ${n.recipient}</span>
+                </div>
+            </div>
+        `;
+    });
+
+    list.innerHTML = html;
+}
+
+function openNotificationModal() {
+    fetchNotificationsFeed();
+    document.getElementById('notificationModal').style.display = 'flex';
+}
+
+function closeNotificationModal() {
+    document.getElementById('notificationModal').style.display = 'none';
+}
+
+function testNotificationAlert() {
+    playSpoilageAlertSound('critical');
+    showToast('🚨 DEMO SPOILAGE ALERT', 'STACK-B01 (Corn) estimated to spoil in 3.5 Days due to CO2 respiration rise.', 'critical');
+    triggerDesktopNotification('🚨 GrainGuard Early Spoilage Alert', 'STACK-B01 Days-to-Spoilage dropped to 3.5 Days! Aeration or milling dispatch prioritized.');
+}
+
